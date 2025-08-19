@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/article.dart';
 
 class NewsService {
@@ -7,20 +8,57 @@ class NewsService {
   static const String apiKey = '554e0c2d61484768b556cd9376f0c040';
   static const String baseUrl = 'https://newsapi.org/v2';
 
+  // Proxy URL untuk web (opsional - jika Anda membuat backend proxy)
+  static const String proxyUrl = 'https://api.allorigins.win/raw?url=';
+
+  // CORS Proxy alternatives (gunakan salah satu)
+  static const String corsProxy1 = 'https://cors-anywhere.herokuapp.com/';
+  static const String corsProxy2 = 'https://api.allorigins.win/raw?url=';
+
+  // Helper method untuk mendapatkan URL yang sesuai platform
+  static String _getApiUrl(String endpoint) {
+    if (kIsWeb) {
+      // Untuk web, gunakan CORS proxy
+      return '$corsProxy2${Uri.encodeComponent('$baseUrl$endpoint')}';
+    } else {
+      // Untuk mobile, langsung ke API
+      return '$baseUrl$endpoint';
+    }
+  }
+
+  // Helper method untuk mendapatkan headers yang sesuai platform
+  static Map<String, String> _getHeaders() {
+    if (kIsWeb) {
+      return {
+        'Content-Type': 'application/json',
+        // Untuk web dengan proxy, kita tidak perlu User-Agent
+      };
+    } else {
+      return {'Content-Type': 'application/json', 'User-Agent': 'NewsApp/1.0'};
+    }
+  }
+
   // Method untuk mendapatkan top headlines
   static Future<List<Article>> getTopHeadlines({String country = 'us'}) async {
     try {
-      // Menggunakan country='us' karena lebih stabil dan banyak artikel
-      final response = await http.get(
-        Uri.parse('$baseUrl/top-headlines?country=$country&apiKey=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'NewsApp/1.0',
-        },
-      );
+      final String endpoint = '/top-headlines?country=$country&apiKey=$apiKey';
+      final String url = _getApiUrl(endpoint);
+
+      print('Requesting URL: $url');
+
+      final response = await http
+          .get(Uri.parse(url), headers: _getHeaders())
+          .timeout(
+            Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Request timeout. Please check your connection.');
+            },
+          );
 
       print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      print(
+        'Response body preview: ${response.body.length > 100 ? response.body.substring(0, 100) + "..." : response.body}',
+      );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -50,6 +88,11 @@ class NewsService {
       }
     } catch (e) {
       print('Error in getTopHeadlines: $e');
+      if (kIsWeb && e.toString().contains('CORS')) {
+        throw Exception(
+          'CORS Error: Please use a proxy server or enable CORS in development.',
+        );
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -57,15 +100,13 @@ class NewsService {
   // Method untuk mendapatkan berita berdasarkan kategori
   static Future<List<Article>> getNewsByCategory(String category) async {
     try {
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/top-headlines?country=us&category=$category&apiKey=$apiKey',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'NewsApp/1.0',
-        },
-      );
+      final String endpoint =
+          '/top-headlines?country=us&category=$category&apiKey=$apiKey';
+      final String url = _getApiUrl(endpoint);
+
+      final response = await http
+          .get(Uri.parse(url), headers: _getHeaders())
+          .timeout(Duration(seconds: 30));
 
       print('Category Response status: ${response.statusCode}');
 
@@ -96,6 +137,11 @@ class NewsService {
       }
     } catch (e) {
       print('Error in getNewsByCategory: $e');
+      if (kIsWeb && e.toString().contains('CORS')) {
+        throw Exception(
+          'CORS Error: Please use a proxy server or enable CORS in development.',
+        );
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -103,22 +149,19 @@ class NewsService {
   // Method untuk search berita dengan format yang benar
   static Future<List<Article>> searchNews(String query) async {
     try {
-      // Format tanggal untuk from parameter (30 hari yang lalu)
       final DateTime thirtyDaysAgo = DateTime.now().subtract(
         Duration(days: 30),
       );
       final String fromDate =
           '${thirtyDaysAgo.year}-${thirtyDaysAgo.month.toString().padLeft(2, '0')}-${thirtyDaysAgo.day.toString().padLeft(2, '0')}';
 
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/everything?q=${Uri.encodeComponent(query)}&from=$fromDate&sortBy=popularity&language=en&apiKey=$apiKey',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'NewsApp/1.0',
-        },
-      );
+      final String endpoint =
+          '/everything?q=${Uri.encodeComponent(query)}&from=$fromDate&sortBy=popularity&language=en&apiKey=$apiKey';
+      final String url = _getApiUrl(endpoint);
+
+      final response = await http
+          .get(Uri.parse(url), headers: _getHeaders())
+          .timeout(Duration(seconds: 30));
 
       print('Search Response status: ${response.statusCode}');
 
@@ -150,6 +193,11 @@ class NewsService {
       }
     } catch (e) {
       print('Error in searchNews: $e');
+      if (kIsWeb && e.toString().contains('CORS')) {
+        throw Exception(
+          'CORS Error: Please use a proxy server or enable CORS in development.',
+        );
+      }
       throw Exception('Network error: $e');
     }
   }
@@ -163,15 +211,13 @@ class NewsService {
       final String fromDate =
           '${thirtyDaysAgo.year}-${thirtyDaysAgo.month.toString().padLeft(2, '0')}-${thirtyDaysAgo.day.toString().padLeft(2, '0')}';
 
-      final response = await http.get(
-        Uri.parse(
-          '$baseUrl/everything?q=Indonesia&from=$fromDate&sortBy=popularity&language=en&apiKey=$apiKey',
-        ),
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'NewsApp/1.0',
-        },
-      );
+      final String endpoint =
+          '/everything?q=Indonesia&from=$fromDate&sortBy=popularity&language=en&apiKey=$apiKey';
+      final String url = _getApiUrl(endpoint);
+
+      final response = await http
+          .get(Uri.parse(url), headers: _getHeaders())
+          .timeout(Duration(seconds: 30));
 
       print('Indonesian News Response status: ${response.statusCode}');
 
@@ -205,7 +251,23 @@ class NewsService {
       }
     } catch (e) {
       print('Error in getIndonesianNews: $e');
+      if (kIsWeb && e.toString().contains('CORS')) {
+        throw Exception(
+          'CORS Error: Please use a proxy server or enable CORS in development.',
+        );
+      }
       throw Exception('Network error: $e');
+    }
+  }
+
+  // Method untuk testing koneksi
+  static Future<bool> testConnection() async {
+    try {
+      final response = await getTopHeadlines();
+      return response.isNotEmpty;
+    } catch (e) {
+      print('Connection test failed: $e');
+      return false;
     }
   }
 }
